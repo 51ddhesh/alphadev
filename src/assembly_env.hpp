@@ -51,4 +51,7 @@ public:
     float get_score() const;
 
     bool is_sorted() const;
+
+    // Enables JAX - C++ interop
+    std::vector<float> observe() const;
 };

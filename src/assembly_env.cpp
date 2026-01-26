@@ -117,3 +117,39 @@ float AssemblyEnv::get_score() const {
     else return -100.0f;
 }
 
+
+std::vector<float> AssemblyEnv::observe() const {
+    std::vector<float> obs;
+    obs.reserve((NUM_TEST_CASES * NUM_REGS) + (MAX_STEPS * 5));
+
+    for (int val : registers_) {
+        obs.push_back(static_cast<float>(val));
+    }
+
+
+    for (int i = 0; i < MAX_STEPS; i++) {
+        if (i < history_.size()) {
+            const auto& instr = history_[i];
+            obs.push_back(static_cast<float>(instr.op));
+            obs.push_back(static_cast<float>(instr.rd));
+            obs.push_back(static_cast<float>(instr.rs1));
+            obs.push_back(static_cast<float>(instr.rs2));
+            obs.push_back(static_cast<float>(instr.rs3));
+        }
+
+        else {
+            // if the program is shorter than MAX_STEPS
+            // fill the remaining observation with -1
+            // This will tell the model that nothing has happened here yet
+            obs.push_back(-1.0f); // op
+            obs.push_back(-1.0f); // rd
+            obs.push_back(-1.0f); // rs1
+            obs.push_back(-1.0f); // rs2
+            obs.push_back(-1.0f); // rs3
+        }
+    }
+    
+    return obs;
+}
+
+
