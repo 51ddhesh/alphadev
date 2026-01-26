@@ -4,12 +4,14 @@ project(alphadev LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+
+find_package(pybind11 REQUIRED)
+
+pybind11_add_module(alphadev src/assembly_env.cpp src/bindings.cpp)
 
 if(MSVC)
-    add_compile_options(/O2 /fp:fast)
+    target_compile_options(alphadev PRIVATE /O2 /fp:fast)
 else()
-    add_compile_options(-O2 -march=native -ffast-math)
+    target_compile_options(alphadev PRIVATE -O3 -march=native)
 endif()
-
-
-add_executable(ad main.cpp)
