@@ -6,13 +6,12 @@
 
 // The Allowed Moves (The ISA)
 enum OpCode {
-    OP_MOV  = 0, // rd = rs1
-    OP_ADD  = 1, // rd = rs1 + rs2
-    OP_SUB  = 2, // rd = rs1 - rs2
-    OP_AND  = 3, // rd = rs1 & rs2
-    OP_SLT  = 4, // rd = (rs1 < rs2) ? 1 : 0
-    OP_CMOV = 5, // rd = (rs3 != 0) ? rs1 : rs2
-    OP_COUNT = 6
+    OP_ADD  = 0, // rd = rs1 + rs2
+    OP_SUB  = 1, // rd = rs1 - rs2
+    OP_AND  = 2, // rd = rs1 & rs2
+    OP_SLT  = 3, // rd = (rs1 < rs2) ? 1 : 0
+    OP_CMOV = 4, // rd = (rs3 != 0) ? rs1 : rs2
+    OP_COUNT = 5
 };
 
 // A single instruction in the program history

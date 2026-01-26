@@ -58,23 +58,23 @@ bool AssemblyEnv::step(int op, int rd, int rs1, int rs2, int rs3) {
         int result = 0;
 
         switch (op) {
-            case 0: // ADD
+            case OP_ADD: // ADD
                 result = val1 + val2;
                 break;
             
-            case 1: // SUB
+            case OP_SUB: // SUB
                 result = val1 - val2;
                 break;
 
-            case 2: // AND
+            case OP_AND: // AND
                 result = val1 & val2;
                 break;
 
-            case 3: // SLT (Set Less Than)
+            case OP_SLT: // SLT (Set Less Than)
                 result = (val1 < val2) ? 1 : 0;
                 break;
 
-            case 4: // CMOV (Conditional Move)
+            case OP_CMOV: // CMOV (Conditional Move)
                 // if val3 is NOT zero, take val1 else val2
                 result = (val3 != 0) ? val1 : val2;
                 break;
@@ -105,7 +105,7 @@ bool AssemblyEnv::is_sorted() const {
         if (!(x1 <= x2 && x2 <= x3)) return false;
     }
 
-    return false;
+    return true;
 }
 
 float AssemblyEnv::get_score() const {
