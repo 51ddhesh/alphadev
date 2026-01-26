@@ -6,6 +6,7 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(alphadev, m) {
     m.doc() = "RISC-V Subset of AlphaDev styled Assembly Environment";
+
     py::enum_<OpCode>(m, "OpCode")
         .value("ADD", OP_ADD)
         .value("SUB", OP_SUB)
@@ -18,7 +19,7 @@ PYBIND11_MODULE(alphadev, m) {
         .def(py::init<>()) // constructor
         .def("reset", &AssemblyEnv::reset, "Reset the permutations")
 
-        // 
+        // return true if steps completed
         .def("step", &AssemblyEnv::step, 
             py::arg("op"), py::arg("rd"), py::arg("rs1"), py::arg("rs2"), py::arg("rs3"),
             "Executes one instruction. Returns true if max steps reached")
