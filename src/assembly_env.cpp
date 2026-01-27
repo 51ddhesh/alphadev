@@ -109,12 +109,38 @@ bool AssemblyEnv::is_sorted() const {
 }
 
 float AssemblyEnv::get_score() const {
-    if (is_sorted()) { 
-        // Model wins
+    // if (is_sorted()) { 
+    //     // Model wins
+    //     return 10.0f - (0.1f * steps_taken_);
+    // }
+
+    // else return -100.0f;
+
+    float score = 0.0f;
+
+    int correct_checks = 0;
+
+    for (int i = 0; i < NUM_TEST_CASES; i++) {
+        int base_index = i * NUM_REGS;
+        int x1 = registers_[base_index + 1];
+        int x2 = registers_[base_index + 2];
+        int x3 = registers_[base_index + 3];
+    
+        if (x1 <= x2) correct_checks++;
+        if (x2 <= x3) correct_checks++;
+    }
+
+    // Normalized Score:
+    // If perfect (12/12), we switch to Length Optimization mode.
+    // Reward = 10.0 - length_penalty
+    if (correct_checks == (NUM_TEST_CASES * 2)) {
         return 10.0f - (0.1f * steps_taken_);
     }
 
-    else return -100.0f;
+    // If imperfect, we return a negative score based on distance to solution.
+    // Range: [-12.0 ... -0.1]
+    // We subtract a small time penalty to encourage trying to sort FASTER.
+    return (float)(correct_checks - (NUM_TEST_CASES * 2)) - (0.05f * steps_taken_);
 }
 
 
