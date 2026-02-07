@@ -9,8 +9,8 @@ find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(pybind11 REQUIRED)
 
 pybind11_add_module(alphadev_env
-    src/env/assembly_env.cpp
-    src/env/bindings.cpp
+    src/assembly_env/assembly_env.cpp
+    src/assembly_env/bindings.cpp
 )
 
 target_include_directories(alphadev_env PRIVATE src/env)
