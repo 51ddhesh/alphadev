@@ -1,0 +1,20 @@
+[project]
+name = "alphadev"
+version = "0.1.0"
+description = "Implementating of Google DeepMind's AlphaDev paper"
+readme = "README.md"
+requires-python = ">=3.13"
+
+dependencies = [
+    "jax[cuda12] >= 0.4.30",
+    "flax >= 0.8.0",
+    "optax >= 0.2.0",
+    "numpy >= 2.4.2",
+    "pybind11 >= 3.0.1",
+    "cmake >= 3.28",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest >= 9.0",
+]
