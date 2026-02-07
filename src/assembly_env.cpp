@@ -102,7 +102,9 @@ bool AssemblyEnv::is_sorted() const {
         int x2 = registers_[base_index + 2];
         int x3 = registers_[base_index + 3];
         
-        if (!(x1 <= x2 && x2 <= x3)) return false;
+        // if (!(x1 <= x2 && x2 <= x3)) return false;
+   
+        if (x1 != 1 || x2 != 2 || x3 != 3) return false;
     }
 
     return true;
@@ -117,8 +119,7 @@ float AssemblyEnv::get_score() const {
     // else return -100.0f;
 
     float score = 0.0f;
-
-    int correct_checks = 0;
+    int correct_registers = 0;
 
     for (int i = 0; i < NUM_TEST_CASES; i++) {
         int base_index = i * NUM_REGS;
@@ -126,21 +127,26 @@ float AssemblyEnv::get_score() const {
         int x2 = registers_[base_index + 2];
         int x3 = registers_[base_index + 3];
     
-        if (x1 <= x2) correct_checks++;
-        if (x2 <= x3) correct_checks++;
+        if (x1 == 1) correct_registers++;
+        if (x2 == 2) correct_registers++;
+        if (x3 == 3) correct_registers++;
     }
 
-    // Normalized Score:
-    // If perfect (12/12), we switch to Length Optimization mode.
-    // Reward = 10.0 - length_penalty
-    if (correct_checks == (NUM_TEST_CASES * 2)) {
+    // // Normalized Score:
+    // // If perfect (12/12), we switch to Length Optimization mode.
+    // // Reward = 10.0 - length_penalty
+    // if (correct_checks == (NUM_TEST_CASES * 2)) {
+    //     return 10.0f - (0.1f * steps_taken_);
+    // }
+
+    if (correct_registers == (NUM_TEST_CASES * 3)) {
         return 10.0f - (0.1f * steps_taken_);
     }
 
     // If imperfect, we return a negative score based on distance to solution.
     // Range: [-12.0 ... -0.1]
     // We subtract a small time penalty to encourage trying to sort FASTER.
-    return (float)(correct_checks - (NUM_TEST_CASES * 2)) - (0.05f * steps_taken_);
+    return (float)(correct_registers - 18) - (0.05f * steps_taken_);
 }
 
 
