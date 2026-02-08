@@ -125,3 +125,134 @@ class ProgramEncoder(nn.Module):
         x = jnp.mean(x, axis=1)  # (batch, embed_dim)
 
         return x
+    
+
+class RegisterEncoder(nn.Module):
+    """
+        - Description:
+            Encodes the register state (all test cases) via MLP
+
+        - Input:
+            register section of obs (i.e., observation)
+            shape (batch, 48)
+            normalized floats
+
+        - Output:
+            (batch, EMBED_DIM) latent vector   
+    """
+
+    embed_dim: int = EMBED_DIM
+
+    @nn.compact
+    def __call__(self, regs: jnp.ndarray) -> jnp.ndarray:
+        x = nn.Dense(self.embed_dim)(regs)
+        x = nn.gelu(x)
+        x = nn.Dense(self.embed_dim)(x)
+        x = nn.gelu(x)
+
+        return x
+    
+
+class AlphaDevNetwork(nn.Module):
+    """
+        - Description:
+            Full AlphaDev Network
+
+        - Input:
+            observation vector (batch, OBS_TOTAL_SIZE)
+
+        - Output:
+            policy: tuple of 5 logit arrays (op, rd, rs1, rs2, rs3)
+                    each conditioned on the previous choices (autoregressive)
+            value: (batch, 1) scalar estimate
+    """ 
+
+    @nn.compact
+    def __call__(self, obs: jnp.ndarray) -> Tuple:
+        batch = obs.shape[0]
+
+        # Parse the observation
+        regs_section = obs[:, :OBS_REG_SIZE] # (8, 48)
+        prog_section = obs[:, OBS_REG_SIZE:OBS_REG_SIZE + OBS_PROG_SIZE] # (8, 100)
+        meta_section = obs[:, OBS_REG_SIZE + OBS_PROG_SIZE:] # (8, 1)
+
+        # Encode
+        h_prog = ProgramEncoder()(prog_section)
+        h_regs = RegisterEncoder()(regs_section)
+
+        # Fuse
+        fused = jnp.concatenate([h_prog, h_regs, meta_section], axis=-1)
+
+        # Shared Backbone
+        latent = nn.Dense(HIDDEN_DIM)(fused)
+        latent = nn.gelu(latent)
+        latent = nn.Dense(HIDDEN_DIM)(latent)
+        latent = nn.gelu(latent)
+
+        # Value head
+        v = nn.Dense(HIDDEN_DIM // 2)(latent)
+        v = nn.gelu(v)
+        value = nn.Dense(1)(v)  # (B, 1)
+
+        """
+            - Autoregressive policy head 
+                Each sub-decision gets the shared latent + embeddings of
+                previous choices. During MCTS we do a single forward pass
+                and get all logits; the autoregressive conditioning uses
+                the argmax of each distribution to condition the next one.
+        """
+
+        # shared section embedding for conditioning
+        act_op_emb = nn.Embed(num_embeddings=NUM_OPS, features=32, name='act_op_emb')
+        act_reg_emb = nn.Embed(num_embeddings=NUM_REGS, features=32, name='act_reg_emb')
+
+        # Step 1: Op
+        logits_op = nn.Dense(NUM_OPS, name='head_op')(latent) # (B, 5)
+        chosen_op = jnp.argmax(logits_op, axis=-1) # (B,)
+
+        # Step 2: Rd conditioned on op
+        ctx_rd = jnp.concatenate([latent, act_op_emb(chosen_op)], axis=-1)
+        logits_rd = nn.Dense(NUM_REGS, name='head_rd')(ctx_rd) # (B, 8)
+        chosen_rd = jnp.argmax(logits_rd, axis=-1)
+
+        # Step 3: Rs1 conditioned on op, rd
+        ctx_rs1 = jnp.concatenate([
+            latent, act_op_emb(chosen_op), act_reg_emb(chosen_rd)
+        ], axis=-1)
+        logits_rs1 = nn.Dense(NUM_REGS, name='head_rs1')(ctx_rs1) # (B, 8)
+        chosen_rs1 = jnp.argmax(logits_rs1, axis=-1)
+
+        # Step 4: Rs2 conditioned on op, rd, rs1
+        ctx_rs2 = jnp.concatenate([
+            latent,
+            act_op_emb(chosen_op),
+            act_reg_emb(chosen_rd),
+            act_reg_emb(chosen_rs1),
+        ], axis=-1)
+        logits_rs2 = nn.Dense(NUM_REGS, name='head_rs2')(ctx_rs2) # (B, 8)
+        chosen_rs2 = jnp.argmax(logits_rs2, axis=-1)
+
+        # Step 5: Rs3 conditioned on op, rd, rs1, rs2
+        ctx_rs3 = jnp.concatenate([
+            latent,
+            act_op_emb(chosen_op),
+            act_reg_emb(chosen_rd),
+            act_reg_emb(chosen_rs1),
+            act_reg_emb(chosen_rs2),
+        ], axis=-1)
+        logits_rs3 = nn.Dense(NUM_REGS, name='head_rs3')(ctx_rs3) # (B, 8)
+
+        policy = (logits_op, logits_rd, logits_rs1, logits_rs2, logits_rs3)
+        return policy, value
+    
+def create_inference_fn(model: AlphaDevNetwork):
+    """
+        - Description:
+            Returns a JIT-compiled function: (params, obs_batch) -> (policy, value)
+    """
+
+    @jax.jit
+    def inference(params, obs):
+        return model.apply(params, obs)
+    
+    return inference
