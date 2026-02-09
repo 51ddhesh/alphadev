@@ -205,3 +205,49 @@ def _select(node: Node) -> Node:
 
 
     return node
+
+
+def _expand(node: Node, env, inference_fn: Callable, params, rng: np.random.Generator) -> float:
+    """
+        - Description
+            This function expands the leaf nodes
+            1. Runs the network to get the policy and value
+            2. Create children from the Top-K actions
+            3. Return the values estimate
+    """
+
+    # Get the observation from the environment snapshot
+    obs = np.array(env.observe(), dtype=np.float32)
+    obs_batch = jnp.expand_dims(jnp.array(obs), axis = 0)
+
+    logits, value_est = inference_fn(logits, TOP_K_ACTIONS, rng)
+    value = float(value_est[0, 0])
+
+    # Get the top-K actions
+    candidate_actions = _decode_top_k_actions(logits, TOP_K_ACTIONS, rng)
+
+    # CReate the child nodes
+    for act, prior in candidate_actions:
+        if act not in node.children:
+            node.children[act] = Node(
+                parent=node,
+                action_from_parent=act,
+                prior=prior
+            )
+
+    node.env_snapshot = env
+
+    return value
+
+def _backpropogate(node: Node, value: float) -> None:
+    """
+        - Description:  
+            Propogate the value estimate up to the root
+    """
+
+    while node is not None:
+        node.visit_count += 1
+        node.value_sum += value
+        node = node.parent
+
+
