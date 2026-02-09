@@ -90,4 +90,118 @@ class Node:
         return self.value + exploration
     
 
+def _decode_top_k_actions(
+    logits_tuple: Tuple,
+    k: int = TOP_K_ACTIONS,
+    rng: Optional[np.random.Generator] = None
+) -> List[Tuple[Action, float]]:
+    """
+        - Description:
+            Get the top K actions from the factored logits
+
+        - Strategy:
+            1. Always include the argmax (greedy)
+            2. Sample the remaining (k - 1) actions proportional to the product of per-component probabilities
+    """
+
+    l_op, l_rd, l_rs1, l_rs2, l_rs3 = logits_tuple
+
+    # Squeeze the batch dim and convert to numpy
+    p_op = np.asarray(jax.nn.softmax(l_op[0]))
+    p_rd = np.asarray(jax.nn.softmax(l_rd[0]))
+    p_rs1 = np.asarray(jax.nn.softmax(l_rs1[0]))
+    p_rs2 = np.asarray(jax.nn.softmax(l_rs2[0]))
+    p_rs3 = np.asarray(jax.nn.softmax(l_rs3[0]))
+
+    if rng is None:
+        rng = np.random.default_rng
+
+
+    actions: List[Tuple[Action, float]] = []
+    seen = set()
+
+
+    # Greedy action
+    greedy = Action(
+        int(np.argmax(p_op)),
+        int(np.argmax(p_rd)),
+        int(np.argmax(p_rs1)),
+        int(np.argmax(p_rs2)),
+        int(np.argmax(p_rs3)),
+    )
+
+    # Find the joint probability
+    # This is the probability of selecting a specific joint action during the simulation phase
+    # Possiblly, this is the best heuristic
+    joint_p = float(
+        p_op[greedy.op] * p_rd[greedy.rd] * p_rs1[greedy.rs1] * p_rs2[greedy.rs2] * p_rs3[greedy.rs3]
+    )
+
+    actions.append((greedy, joint_p))
+    seen.add(greedy)
+
+    # Sample the remaining k - 1 actions
+
+    max_attempts = k * 10
+    attempts = 0
+
+    while len(actions) < k and attempts < max_attempts:
+        attempts += 1
+        op = int(rng.choice(len(p_op), p = p_op))
+        rd = int(rng.choice(len(p_rd), p = p_rd))
+        rs1 = int(rng.choice(len(p_rs1), p = p_rs1))
+        rs2 = int(rng.choice(len(p_rs2), p = p_rs2))
+        rs3 = int(rng.choice(len(p_rs3), p = p_rs3))
+
+        act = Action(op, rd, rs1, rs2, rs3)
+        if act in seen:
+            continue
+
+        jp = float(
+            p_op[op] * p_rd[rd] * p_rs1[rs1] * p_rs2[rs2] * p_rs3[rs3] 
+        )
+
+        actions.append((act, jp))
+        seen.add(act)
+
+    return actions
+
+
+def _add_dirichlet_noise(node: Node, rng: np.random.Generator) -> None:
+    """
+        - Description:
+            Add noise to the root priors to promote exploration
+    """
+
+    if not node.children:
+        return
     
+    actions = list(node.children.keys)
+    noise = rng.dirichlet([DIRICHLET_ALPHA] * len(actions))
+
+    for i, act in enumerate(actions):
+        child = node.children[act]
+        child.prior = (
+            (1.0 - DIRICHLET_FRAC) * child.prior + DIRICHLET_FRAC * noise[i]
+        )
+
+
+def _select(node: Node) -> Node:
+    """
+        - Description:
+            Walk down the tree and use Upper Confidence Bound (UCB) until a terminal is hit 
+    """
+
+    while node.children and not node.is_terminal:
+        best_score = -float('inf')
+        best_child = None
+
+        for child in node.children.values():
+            score = child.ucb_score(node.visit_count)
+            if score > best_score:
+                best_score = score
+                best_child = child
+        node = best_child
+
+
+    return node
