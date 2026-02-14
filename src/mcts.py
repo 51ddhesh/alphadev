@@ -251,3 +251,173 @@ def _backpropogate(node: Node, value: float) -> None:
         node = node.parent
 
 
+# ─── The Core Monte-Carlo Search ──────────────────────────────
+def mcts_search(
+    root_env,
+    inference_fn: Callable,
+    params,
+    num_simulations: int = 50,
+    add_noise: bool = True,
+    seed: int = 0
+) -> Node:
+    """
+        - Description:
+            Run the Monte-Carlo Tree Search from the given position or the env state.
+
+        - Input:
+            root_env: AssemblyEnv (from C++ bindings).
+            inference_fn: JIT Compiled function which takes in (params, obs) and returns (policy, value).
+            params: network parameters.
+            num_simulations: the number of MCTS simulations to run.
+            add_noise: the Dirichlet parameters to add noise (promotes expoloration) at root.
+            seed: Random Number Generator seed value.
+
+        - Outputs:
+            Node: Root Node with updated visit counts and values  
+    """
+
+    rng = np.random.default_rng(seed=seed);
+    root = Node()
+
+    # Expand the root
+    root_clone = root_env.clone()
+
+    if root_clone.is_sorted():
+        root.is_terminal = True
+        root.terminal_reward = root_clone.reward()
+        root.visit_count = 1
+        root.value_sum = root.terminal_reward
+        return root
+    
+    if root_clone.is_done():
+        root.is_terminal = True
+        root.terminal_reward = root_clone.reward()
+        root.visit_count = 1
+        root.value_sum = root.terminal_reward
+        return root
+
+    _expand(root, root_env, inference_fn, params, rng)
+
+    if add_noise:
+        _add_dirichlet_noise(root, rng)
+
+    
+    """
+        Start running the simulations
+    """
+
+    for _ in range(num_simulations):
+        # Selection
+        leaf = _select(root)
+        if leaf.is_terminal:        
+            _backpropogate(leaf, leaf.terminal_reward)
+
+        # Get env for the node
+        ancestors = []
+        cursor = leaf
+        while cursor.env_snapshot is None and cursor.parent is not None:
+            ancestors.append(cursor.action_from_parent)
+            cursor = cursor.parent
+
+        if cursor.env_snapshot is None:
+            _backpropogate(leaf, 0.0)
+
+        leaf_env = cursor.env_snapshot.clone()
+
+        for act in reversed(ancestors):
+            try:
+                leaf_env.step(act.op, act.rd, act.rs1, act.rs2, act.rs3)
+            except RuntimeError:
+                leaf.is_terminal = True
+                leaf.terminal_reward = leaf_env.reward()
+                _backpropogate(leaf, leaf.terminal_reward)
+                break
+        
+        else:
+            # Check terminal conditions
+            if leaf_env.is_sorted():
+                leaf.is_terminal = True
+                leaf.terminal_reward = leaf_env.reward()
+                _backpropogate(leaf, leaf.terminal_reward)
+                continue
+
+            if leaf_env.is_done():
+                leaf.is_terminal = True
+                leaf.terminal_reward = leaf_env.reward()
+                
+        # expansion
+        value = _expand(leaf, leaf_env, inference_fn, rng)
+        _backpropogate(leaf, value)
+
+    return root
+
+
+def get_mcts_policy(root: Node) -> Tuple:
+    """
+        - Description:
+            Extract improved policy from MCTS visit counts.
+            Returns 5 probability distributions (marginalized)
+
+            (p_op, p_rd, p_rs1, p_rs2, p_rs3)
+    """
+
+    counts_op = np.zeros(NUM_OPS, dtype=np.float32)
+    counts_rd = np.zeros(NUM_REGS, dtype=np.float32)
+    counts_rs1 = np.zeros(NUM_REGS, dtype=np.float32)
+    counts_rs2 = np.zeros(NUM_REGS, dtype=np.float32)
+    counts_rs3 = np.zeros(NUM_REGS, dtype=np.float32)
+
+    total = 0
+
+    for action, child in root.children.items():
+        v = child.visit_count
+        if v == 0:
+            continue
+    
+        total += v
+        counts_op[action.op] += v
+        counts_rd[action.rd] += v
+        counts_rs1[action.rs1] += v
+        counts_rs2[action.rs2] += v
+        counts_rs3[action.rs3] += v
+
+    if total == 0:
+        return (
+            np.ones(NUM_OPS, dtype=np.float32) / NUM_OPS,
+            np.ones(NUM_REGS, dtype=np.float32) / NUM_REGS,
+            np.ones(NUM_REGS, dtype=np.float32) / NUM_REGS,
+            np.ones(NUM_REGS, dtype=np.float32) / NUM_REGS,
+            np.ones(NUM_REGS, dtype=np.float32) / NUM_REGS,
+        )
+    
+    return (
+        counts_op  / total,
+        counts_rd  / total,
+        counts_rs1 / total,
+        counts_rs2 / total,
+        counts_rs3 / total,
+    )
+
+def select_action(root: Node, temperature: float = 1.0) -> Action:
+    """
+        - Description:
+            Select an action from the root based on visit counts
+
+            temperature = 0: always pick most visited (exploited)
+            temperature < 0: sample proportional to viist_count ^ (1 / temp)
+    """
+    if not root.children:
+        raise ValueError("Cannot select action as the root has no children")
+    
+    actions = list(root.children.keys())
+    visits = np.array([root.children[a].visit_count for a in actions], dtype=np.float64)
+
+    if temperature < 1e-6:
+        idx = int(np.argmax(visits))
+
+    else:
+        visits_temp = visits ** (1.0 / temperature)
+        probs = visits_temp / visits_temp.sum()
+        idx = int(np.random.choice(len(actions), p = probs))
+
+    return actions[idx]
