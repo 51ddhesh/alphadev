@@ -1,1 +1,1 @@
-from .instructions import OpCode, Operand
+from .instructions import OpCode, Operand, OperandType, Instruction, InstructionSet
