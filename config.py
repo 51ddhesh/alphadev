@@ -12,7 +12,7 @@ import jax.numpy as jnp
 @dataclass(frozen=True)
 class InstructionConfig:
     """
-        - Define the assembly ISA to the agent
+        ## Define the assembly ISA to the agent
     """
 
     # R0, R1, R2, R3
@@ -28,7 +28,7 @@ class InstructionConfig:
 @dataclass(frozen=True)
 class EnvironmentConfig:
     """
-        - Environment Configuration
+        ## Environment Configuration
     """
 
     # Number of elements to sort
@@ -54,7 +54,7 @@ class EnvironmentConfig:
 @dataclass(frozen=True)
 class NNConfig:
     """
-        - Neural Network configuration
+        ## Neural Network configuration
     """
 
     # ─── State Embedding ───────────────────────────────────────
@@ -82,7 +82,7 @@ class NNConfig:
 @dataclass(frozen=True)
 class MCTSConfig:
     """
-        - Monte-Carlo Search Tree configuration
+        ## Monte-Carlo Search Tree configuration
     """
 
     # Simulations per move
@@ -112,7 +112,7 @@ class MCTSConfig:
 @dataclass(frozen=True)
 class TrainingConfig:
     """
-        - Training loop configuration
+        ## Training loop configuration
     """
 
     # ─── Core ──────────────────────────────────────────────────
@@ -146,7 +146,7 @@ class TrainingConfig:
 @dataclass(frozen=True)
 class AlphaDevConfig:
     """
-        - Top level configuration combining all the configurations
+        ## Top level configuration combining all the configurations
     """
 
     instruction: InstructionConfig = field(default_factory=InstructionConfig)
